@@ -1,0 +1,32 @@
+{
+  "fit": {
+    "usernames": {
+      ".read": "auth != null",
+      "$name": {
+        ".write": "auth != null && ((!data.exists() && newData.val() === auth.uid) || (data.val() === auth.uid && !newData.exists()))"
+      }
+    },
+    "public": {
+      ".read": "auth != null",
+      "$uid": {
+        ".write": "auth != null && auth.uid === $uid",
+        ".validate": "newData.child('username').isString() && newData.parent().parent().child('usernames').child(newData.child('username').val().toLowerCase()).val() === auth.uid && (!newData.child('avatar').exists() || (newData.child('avatar').isString() && newData.child('avatar').val().length < 150000))"
+      }
+    },
+    "users": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+    "entries": {
+      ".read": "auth != null",
+      "$ex": {
+        "$id": {
+          ".write": "auth != null && (data.exists() ? data.child('uid').val() === auth.uid : newData.child('uid').val() === auth.uid)",
+          ".validate": "newData.child('uid').val() === auth.uid && newData.child('weight').isNumber() && newData.child('weight').val() >= 0 && newData.child('weight').val() <= 500 && newData.child('reps').isNumber() && newData.child('reps').val() >= 1 && newData.child('reps').val() <= 100 && newData.child('date').isString() && newData.child('date').val().length === 10"
+        }
+      }
+    }
+  }
+}
