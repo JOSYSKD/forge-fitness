@@ -1,6 +1,6 @@
 // App-Shell: Auth-Gate, Navigation, Hash-Router
 import { auth, onAuthStateChanged, register, login, logout, authErrorText, USERNAME_RE } from './firebase.js';
-import { startSession, stopSession, state, username, me } from './store.js';
+import { startSession, stopSession, state, username, me, subscribe } from './store.js';
 import { esc, icon, $, toast, busy, fieldErr, avatar } from './ui.js';
 
 const NAV = [
@@ -59,6 +59,8 @@ export function updateUserChip() {
     <button class="btn ghost icon" title="Abmelden" id="lo">${icon('logout')}</button>`;
   const lo = $('#lo'); if (lo) lo.onclick = () => logout();
   const mav = $('#mob-av'); if (mav) mav.innerHTML = avatar(pub, 'sm');
+  const n = Object.keys(state.requests || {}).length;
+  document.querySelectorAll('[data-nav="profil"]').forEach((a) => { a.querySelector('.nbadge')?.remove(); if (n) a.insertAdjacentHTML('beforeend', `<span class="tag acc nbadge" style="margin-left:auto">${n}</span>`); });
 }
 
 async function route() {
@@ -155,6 +157,9 @@ onAuthStateChanged(auth, async (user) => {
       await saveProfile({ username: name, createdAt: Date.now(), privacy: { training: true, prs: true, ranks: true } });
     }
     shell();
+    subscribe((w) => { if (w === 'friends' || w === 'publics') updateUserChip(); });
+    // Darstellung aus dem Konto übernehmen (gerätübergreifend)
+    if (state.look) { const { applyLook } = await import('./look.js'); applyLook(state.look); }
     if (!routeBound) { window.addEventListener('hashchange', route); routeBound = true; }
     if (!location.hash || location.hash === '#/') location.hash = '#/dashboard'; else route();
   } catch (e) {

@@ -1,7 +1,8 @@
-import { state, ready, subscribe, username, userEntries, personalRecords, userRanks, getDay, getRange, sumDay } from '../store.js';
+import { state, ready, subscribe, username, userEntries, personalRecords, userRanks, getDay, getRange, sumDay, streak, trainingDays, setTrainedOn, STREAK_GRACE } from '../store.js';
 import { EX, exLabel, unitHint, metrics } from '../data/exercises.js';
 import { SPLIT, DAYS } from '../data/splits.js';
-import { esc, icon, fmt, fmtKg, fmtDate, today, addDays, loading, rankBadge } from '../ui.js';
+import { esc, icon, fmt, fmtKg, fmtDate, today, addDays, loading, rankBadge, toast, busy } from '../ui.js';
+import { authErrorText } from '../firebase.js';
 
 export async function render(root) {
   const h = new Date().getHours();
@@ -21,10 +22,10 @@ export async function render(root) {
     <div class="grid g4 mt16" id="stats">${loading()}</div>
     <div class="grid g3 mt16">
       <div class="card" id="nut">${loading()}</div>
-      <div class="card span2" id="recent">${loading()}</div>
+      <div class="card span2" id="records">${loading()}</div>
     </div>
     <div class="grid g2 mt16">
-      <div class="card" id="prs">${loading()}</div>
+      <div class="card" id="streak">${loading()}</div>
       <div class="card" id="ranks">${loading()}</div>
     </div>`;
 
@@ -47,35 +48,57 @@ export async function render(root) {
   await ready();
   const draw = () => { if (root.isConnected) drawTraining(root); };
   draw();
-  return subscribe((w) => { if (w === 'entries' || w === 'publics') draw(); });
+  return subscribe((w) => { if (['entries', 'publics', 'activity'].includes(w)) draw(); });
 }
 
 function drawTraining(root) {
   const mine = userEntries();
   const prs = personalRecords();
   const ranks = userRanks();
-  const days30 = new Set(mine.filter((e) => e.date >= addDays(today(), -29)).map((e) => e.date)).size;
+  const st = streak();
+  const days = new Set(trainingDays());
+  const days30 = [...days].filter((d) => d >= addDays(today(), -29) && d <= today()).length;
   const vol = mine.reduce((a, e) => a + (EX[e.exId].type === 'bw' ? 0 : e.weight * (e.reps || 1) * (e.sets || 1)), 0);
   const top = ranks.filter((r) => r.rank <= 3).length;
   root.querySelector('#stats').innerHTML = [
-    ['Einträge gesamt', fmt(mine.length), `${Object.keys(prs).length} Übungen`],
-    ['Trainingstage (30 T.)', fmt(days30), 'Tage mit Einträgen'],
+    ['Trainings-Streak', `<span class="flame${st.current ? '' : ' off'}" style="font-size:inherit">${icon('flame')}${fmt(st.current)}</span>`, `Rekord: ${fmt(st.best)} Trainings`],
+    ['Trainingstage (30 T.)', fmt(days30), `${fmt(st.total)} insgesamt`],
     ['Bewegtes Volumen', vol >= 10000 ? fmt(vol / 1000, 1) + ' t' : fmt(vol) + ' kg', 'Gewicht × Wdh. × Sätze'],
     ['Podiumsplätze', fmt(top), ranks.length ? `in ${ranks.length} Leaderboards` : 'noch keine Wertung']
   ].map(([l, v, s]) => `<div class="card stat"><div class="lbl">${l}</div><div class="val num">${v}</div><div class="sub">${s}</div></div>`).join('');
 
-  root.querySelector('#recent').innerHTML = `<div class="card-h"><h2>${icon('dumbbell')}Letzte Trainings</h2><a class="small" href="#/leaderboards">Alle Übungen</a></div>` +
-    (mine.length ? `<div class="list">${mine.slice(0, 6).map((e) => {
-      const ex = EX[e.exId]; const isPr = prs[e.exId]?.id === e.id;
-      return `<a class="li" href="#/leaderboards/${e.exId}" style="color:inherit"><div class="grow"><div class="ellip" style="font-weight:600">${esc(exLabel(ex))} ${isPr ? '<span class="tag acc">PR</span>' : ''}</div>
-        <div class="xs muted">${fmtDate(e.date)}${e.sets ? ` · ${e.sets} Sätze` : ''}</div></div>
-        <div style="text-align:right"><div class="num" style="font-weight:700">${ex.type === 'bw' ? '+' : ''}${fmtKg(e.weight)} × ${e.reps}</div><div class="xs dim">${esc(unitHint(ex))}</div></div></a>`;
-    }).join('')}</div>` : `<div class="empty"><b>Noch keine Trainings eingetragen</b>Trage deine erste Leistung in einem Leaderboard ein.<div class="mt12"><a class="btn pri sm" href="#/leaderboards">${icon('plus')}Eintragen</a></div></div>`);
+  // Personal Records
+  const rankOf = Object.fromEntries(ranks.map((r) => [r.exId, r]));
+  const prList = Object.values(prs).sort((a, b) => (metrics(EX[b.exId], b).e1rm || b.weight) - (metrics(EX[a.exId], a).e1rm || a.weight));
+  root.querySelector('#records').innerHTML = `<div class="card-h"><h2>${icon('star')}Personal Records</h2><a class="small" href="#/profil">Alle ${prList.length ? '(' + prList.length + ')' : ''}</a></div>` +
+    (prList.length ? `<div class="scroll-x"><table class="table"><thead><tr><th>Übung</th><th class="r">Bestleistung</th><th class="r hide-sm">1RM ≈</th><th class="r">Rang</th><th class="r hide-sm">Datum</th></tr></thead><tbody>${prList.slice(0, 7).map((e) => {
+      const ex = EX[e.exId]; const m = metrics(ex, e); const rk = rankOf[e.exId];
+      return `<tr><td><a href="#/leaderboards/${e.exId}" style="color:var(--text);font-weight:600">${esc(ex.name)}</a><div class="xs muted">${esc(ex.equip)}</div></td>
+        <td class="r num" style="font-weight:700">${ex.type === 'bw' ? '+' : ''}${fmtKg(e.weight)} <span class="muted" style="font-weight:400">× ${e.reps}</span></td>
+        <td class="r hide-sm muted num">${m.e1rm ? fmtKg(Math.round(m.e1rm * 2) / 2) : '–'}</td>
+        <td class="r">${rk ? `<span class="tag${rk.rank <= 3 ? ' acc' : ''}">#${rk.rank}/${rk.of}</span>` : '–'}</td>
+        <td class="r hide-sm muted small">${fmtDate(e.date)}</td></tr>`;
+    }).join('')}</tbody></table></div>`
+      : `<div class="empty"><b>Noch keine Personal Records</b>Trage deine Bestleistungen in den Leaderboards ein – PRs werden automatisch erkannt.<div class="mt12"><a class="btn pri sm" href="#/leaderboards">${icon('plus')}Leistung eintragen</a></div></div>`);
 
-  const prList = Object.values(prs).sort((a, b) => (metrics(EX[b.exId], b).e1rm || b.weight) - (metrics(EX[a.exId], a).e1rm || a.weight)).slice(0, 6);
-  root.querySelector('#prs').innerHTML = `<div class="card-h"><h2>${icon('star')}Persönliche Bestleistungen</h2><a class="small" href="#/profil">Alle</a></div>` +
-    (prList.length ? `<div class="list">${prList.map((e) => `<div class="li"><div class="grow ellip">${esc(exLabel(EX[e.exId]))}</div><div class="num" style="font-weight:700">${EX[e.exId].type === 'bw' ? '+' : ''}${fmtKg(e.weight)} <span class="muted" style="font-weight:500">× ${e.reps}</span></div></div>`).join('')}</div>`
-      : '<div class="empty">Deine PRs erscheinen hier automatisch.</div>');
+  // Streak
+  const t = today();
+  const flag = !!state.activity?.[state.uid]?.[t];
+  const grid = [...Array(14)].map((_, i) => addDays(t, i - 13));
+  const status = st.trainedToday ? 'Heute erledigt – stark! 💪'
+    : st.alive ? (st.daysLeft <= 1 ? 'Trainiere heute, sonst reißt deine Streak!' : `Noch ${st.daysLeft} Tage bis zum nächsten Training`)
+    : st.best ? 'Streak gerissen – heute neu starten!' : 'Starte deine erste Streak mit einem Training.';
+  root.querySelector('#streak').innerHTML = `<div class="card-h"><h2>${icon('flame')}Trainings-Streak</h2><a class="small" href="#/profil/freunde">Freunde</a></div>
+    <div class="row gap16" style="align-items:flex-end"><div class="streak-num ${st.current ? 'acc' : 'dim'}">${st.current}</div><div class="small muted" style="padding-bottom:4px">Training${st.current === 1 ? '' : 's'} in Folge<br>Rekord: <b style="color:var(--text)">${st.best}</b></div></div>
+    <p class="small mt12 ${st.alive && !st.trainedToday && st.daysLeft <= 1 ? 'danger-t' : 'muted'}">${status}</p>
+    <div class="streak-days mt12">${grid.map((d) => `<i class="${days.has(d) ? 'on' : ''}${d === t ? ' today' : ''}" title="${fmtDate(d)}${days.has(d) ? ' – trainiert' : ''}"></i>`).join('')}</div>
+    <div class="row between xs dim mt8"><span>vor 14 Tagen</span><span>heute</span></div>
+    <button class="btn ${st.trainedToday ? '' : 'pri'} block mt16" id="trained" ${st.trainedToday && !flag ? 'disabled' : ''}>${icon('check')}${st.trainedToday ? (flag ? 'Heute trainiert ✓ (rückgängig)' : 'Heute trainiert ✓') : 'Heute trainiert'}</button>
+    <p class="hint mt8">Zwischen zwei Trainings dürfen bis zu ${STREAK_GRACE} Ruhetage liegen. Eingetragene Leistungen zählen automatisch.</p>`;
+  root.querySelector('#trained').onclick = (e) => busy(e.currentTarget, async () => {
+    try { await setTrainedOn(t, !st.trainedToday); if (!st.trainedToday) toast(`🔥 Streak: ${streak().current || st.current + 1}`); }
+    catch (err) { toast(authErrorText(err), 'err'); }
+  });
 
   root.querySelector('#ranks').innerHTML = `<div class="card-h"><h2>${icon('trophy')}Deine Platzierungen</h2></div>` +
     (ranks.length ? `<div class="list">${ranks.slice(0, 6).map((r) => `<a class="li" style="color:inherit" href="#/leaderboards/${r.exId}">${rankBadge(r.rank)}<div class="grow ellip">${esc(exLabel(EX[r.exId]))}</div><span class="muted small">von ${r.of}</span></a>`).join('')}</div>`

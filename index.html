@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/app.css">
-  <script>try{var a=localStorage.getItem('forge_accent');if(a)document.documentElement.dataset.accent=a;}catch(e){}</script>
+  <script>try{var l=JSON.parse(localStorage.getItem('forge_look')||'{}'),h=document.documentElement;h.dataset.theme=l.theme||'anthrazit';h.dataset.accent=l.accent||'green';if(l.bg){h.dataset.bg='1';h.style.setProperty('--bg-img','url("assets/bg/'+l.bg+'.webp")');h.style.setProperty('--bg-dim',String((l.dim||60)/100));h.style.setProperty('--bg-blur',l.blur?'6px':'0px');}}catch(e){}</script>
 </head>
 <body>
   <div id="boot" class="boot"><div class="spinner"></div></div>

@@ -1,20 +1,17 @@
-import { state, exportAll, deleteAllData, username } from '../store.js';
+import { state, exportAll, deleteAllData, username, saveLook } from '../store.js';
+import { THEMES, ACCENTS, BACKGROUNDS, getLook, applyLook } from '../look.js';
 import { logout, changePassword, reauth, deleteUser, auth, authErrorText } from '../firebase.js';
 import { esc, icon, toast, busy, fieldErr, modal } from '../ui.js';
 import { goalsDialog } from './nutrition.js';
 
-const ACCENTS = [['green', 'Grün', '#34d399'], ['violet', 'Violett', '#a78bfa'], ['blue', 'Blau', '#60a5fa'], ['orange', 'Orange', '#fb923c']];
 
 export function render(root) {
-  const cur = document.documentElement.dataset.accent || 'green';
+  let look = getLook();
   const g = state.goals || {};
   root.innerHTML = `
     <div class="page-head"><div><h1>Einstellungen</h1><p>Konto, Darstellung und Daten.</p></div></div>
     <div class="grid g2">
-      <div class="card"><div class="card-h"><h2>Darstellung</h2></div>
-        <div class="lab">Akzentfarbe</div>
-        <div class="row wrap mt8" id="acc">${ACCENTS.map(([k, n, c]) => `<button class="chip${cur === k ? ' on' : ''}" data-a="${k}"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c};margin-right:6px"></span>${n}</button>`).join('')}</div>
-        <p class="hint mt8">Wird auf diesem Gerät gespeichert.</p></div>
+      <div class="card span2" id="look"></div>
       <div class="card"><div class="card-h"><h2>Ernährungsziele</h2><button class="btn sm" id="goals">Bearbeiten</button></div>
         <div class="row wrap" style="gap:16px"><div><div class="lab">Kalorien</div><b>${g.kcal ?? '–'} kcal</b></div><div><div class="lab">Protein</div><b>${g.p ?? '–'} g</b></div><div><div class="lab">KH</div><b>${g.c ?? '–'} g</b></div><div><div class="lab">Fett</div><b>${g.f ?? '–'} g</b></div></div></div>
       <form class="card" id="pw" novalidate><div class="card-h"><h2>${icon('lock')}Passwort ändern</h2></div>
@@ -32,13 +29,7 @@ export function render(root) {
         </div></div>
     </div>`;
 
-  root.querySelector('#acc').onclick = (e) => {
-    const b = e.target.closest('[data-a]'); if (!b) return;
-    const k = b.dataset.a;
-    if (k === 'green') delete document.documentElement.dataset.accent; else document.documentElement.dataset.accent = k;
-    try { localStorage.setItem('forge_accent', k === 'green' ? '' : k); } catch {}
-    root.querySelectorAll('[data-a]').forEach((x) => x.classList.toggle('on', x === b));
-  };
+  drawLook(root.querySelector('#look'));
   root.querySelector('#goals').onclick = () => goalsDialog(() => render(root));
   root.querySelector('#lo').onclick = () => logout();
   root.querySelector('#exp').onclick = (e) => busy(e.currentTarget, async () => {
@@ -77,4 +68,35 @@ export function render(root) {
       };
     }
   });
+}
+
+let credits = null;
+function drawLook(el) {
+  const look = getLook();
+  el.innerHTML = `<div class="card-h"><h2>Design</h2><span class="hint">Wird in deinem Konto gespeichert – auf allen Geräten gleich.</span></div>
+    <div class="lab">Grundthema</div>
+    <div class="pick-grid mt8">${THEMES.map(([k, n, bg, card]) => `<button class="pick theme${look.theme === k ? ' on' : ''}" data-theme="${k}"><div class="sw"><i style="background:${bg}"></i><i style="background:${card}"></i><i style="background:var(--acc)"></i></div><span>${n}</span></button>`).join('')}</div>
+    <div class="lab mt16">Akzentfarbe</div>
+    <div class="row wrap mt8">${ACCENTS.map(([k, n, c]) => `<button class="acc-dot${look.accent === k ? ' on' : ''}" data-acc="${k}" title="${n}" style="background:${c}"></button>`).join('')}</div>
+    <div class="lab mt16">Hintergrundbild</div>
+    <div class="pick-grid mt8"><button class="pick${!look.bg ? ' on' : ''}" data-bg=""><span style="position:absolute;inset:0;display:grid;place-items:center;background:var(--bg2);color:var(--muted)">Kein Bild</span></button>
+      ${BACKGROUNDS.map((b) => `<button class="pick${look.bg === b ? ' on' : ''}" data-bg="${b}"><img src="assets/bg/${b}-t.webp" alt="" loading="lazy"><span>${esc(credits?.find((c) => c.id === b)?.name || '')}</span></button>`).join('')}</div>
+    ${look.bg ? `<div class="grid g2 mt16"><div class="field"><label>Abdunkeln: ${look.dim} %</label><input type="range" min="40" max="95" step="5" value="${look.dim}" id="dim"></div>
+      <label class="li" style="cursor:pointer;border:0"><span class="grow">Bild weichzeichnen</span><span class="switch"><input type="checkbox" id="blur" ${look.blur ? 'checked' : ''}><span></span></span></label></div>` : ''}
+    <details class="mt16"><summary class="small muted" style="cursor:pointer">Bildnachweise (Wikimedia Commons, freie Lizenzen)</summary><div class="xs muted mt8" id="cred">Lädt…</div></details>`;
+  let t;
+  const set = (patch, redraw = true) => {
+    const l = applyLook({ ...getLook(), ...patch });
+    if (redraw) drawLook(el);
+    clearTimeout(t); t = setTimeout(() => saveLook(l).catch(() => {}), 400);
+  };
+  el.querySelectorAll('[data-theme]').forEach((b) => b.onclick = () => set({ theme: b.dataset.theme }));
+  el.querySelectorAll('[data-acc]').forEach((b) => b.onclick = () => set({ accent: b.dataset.acc }));
+  el.querySelectorAll('[data-bg]').forEach((b) => b.onclick = () => set({ bg: b.dataset.bg }));
+  const dim = el.querySelector('#dim'); if (dim) { dim.oninput = () => { dim.previousElementSibling.textContent = `Abdunkeln: ${dim.value} %`; set({ dim: +dim.value }, false); }; }
+  const blur = el.querySelector('#blur'); if (blur) blur.onchange = () => set({ blur: blur.checked }, false);
+  const cred = el.querySelector('#cred');
+  const showCred = () => { cred.innerHTML = credits.map((c) => `<div style="margin:4px 0"><b style="color:var(--text)">${esc(c.name)}</b> – „${esc(c.title)}“ von ${esc(c.author || 'unbekannt')}, ${esc(c.license)} · <a href="${esc(c.source)}" target="_blank" rel="noopener">Quelle</a></div>`).join(''); };
+  if (credits) showCred();
+  else fetch('assets/bg/credits.json').then((r) => r.json()).then((c) => { credits = c; if (el.isConnected) drawLook(el); }).catch(() => { cred.textContent = 'Konnte nicht geladen werden.'; });
 }

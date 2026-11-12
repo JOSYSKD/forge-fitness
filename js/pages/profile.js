@@ -3,18 +3,21 @@ import { EX, exLabel } from '../data/exercises.js';
 import { esc, icon, fmt, fmtKg, fmtDate, num, toast, busy, fieldErr, avatar, rankBadge, loading } from '../ui.js';
 import { authErrorText } from '../firebase.js';
 import { updateUserChip } from '../app.js';
+import * as F from './friends.js';
+import { streak } from '../store.js';
 
 const EXP = [['', 'Keine Angabe'], ['einsteiger', 'Einsteiger (< 1 Jahr)'], ['fortgeschritten', 'Fortgeschritten (1–3 Jahre)'], ['erfahren', 'Erfahren (3–5 Jahre)'], ['profi', 'Sehr erfahren (5+ Jahre)']];
 const expName = (k) => (EXP.find((e) => e[0] === k) || [, ''])[1];
 
 export async function render(root, { args, key }) {
+  if (key === 'profil' && args[0] === 'freunde') return F.render(root);
   const uid = key === 'u' ? args[0] : state.uid;
   const own = uid === state.uid;
   root.innerHTML = loading();
   await ready();
   const draw = () => { if (root.isConnected) (own ? ownView : publicView)(root, uid); };
   draw();
-  return subscribe((w) => { if (w === 'entries' || w === 'publics') draw(); });
+  return subscribe((w) => { if (['entries', 'publics', 'friends', 'activity'].includes(w)) draw(); });
 }
 
 function sinceText(iso) {
@@ -46,6 +49,7 @@ function publicView(root, uid) {
   root.innerHTML = `
     <a href="javascript:history.back()" class="small muted row" style="gap:4px;margin-bottom:12px">${icon('chevL')}Zurück</a>
     <section class="hero"><div class="row gap16" style="position:relative;z-index:1">${avatar(pub, 'lg')}<div><h1>${esc(pub.username)}</h1>
+      <div class="row wrap mt8">${F.flame(uid)}<span class="muted small">Streak · Rekord ${streak(uid).best}</span>${F.friendButton(uid)}</div>
       <p class="muted mt8">Mitglied seit ${pub.createdAt ? new Date(pub.createdAt).toLocaleDateString('de-DE', { month: 'long', year: 'numeric' }) : '–'}</p>
       ${pub.bio ? `<p class="mt8">${esc(pub.bio)}</p>` : ''}</div></div></section>
     ${facts.length ? `<div class="grid g4 mt16">${facts.map(([l, v]) => `<div class="card stat"><div class="lbl">${l}</div><div class="val" style="font-size:20px">${esc(v)}</div></div>`).join('')}</div>` : ''}
@@ -53,6 +57,7 @@ function publicView(root, uid) {
       <div class="card"><div class="card-h"><h2>${icon('star')}Bestleistungen</h2></div>${pub.showPrs ? prsHtml(uid) : `<div class="empty">${icon('lock')} Privat</div>`}</div>
       <div class="card"><div class="card-h"><h2>${icon('trophy')}Platzierungen</h2></div>${pub.showRanks ? ranksHtml(uid) : `<div class="empty">${icon('lock')} Privat</div>`}</div>
     </div>`;
+  F.bindFriendButtons(root);
 }
 
 function ownView(root, uid) {
@@ -61,10 +66,12 @@ function ownView(root, uid) {
   root.innerHTML = `
     <div class="page-head"><div><h1>Profil</h1><p>So sehen andere Mitglieder dich – du entscheidest, was öffentlich ist.</p></div>
       <div class="row"><a class="btn" href="#/u/${uid}">Öffentliche Ansicht</a></div></div>
+    ${F.profileTabs('')}
     <section class="hero"><div class="row gap16 wrap" style="position:relative;z-index:1">
       <label style="cursor:pointer;position:relative" title="Profilbild ändern">${avatar(pub, 'lg')}<input type="file" accept="image/*" id="avf" hidden>
         <span style="position:absolute;right:-2px;bottom:-2px;width:28px;height:28px;border-radius:50%;background:var(--acc);color:var(--acc-ink);display:grid;place-items:center">${icon('edit')}</span></label>
       <div style="flex:1;min-width:0"><h1>${esc(p.username)}</h1><p class="muted mt8">${[p.experience && expName(p.experience), p.trainingSince && 'Training ' + sinceText(p.trainingSince), p.bodyweight && fmtKg(p.bodyweight), p.height && fmt(p.height) + ' cm'].filter(Boolean).map(esc).join(' · ') || 'Ergänze dein Profil, um mehr zu zeigen.'}</p>
+      <div class="row wrap mt8">${F.flame(uid)}<span class="muted small">Trainings-Streak · Rekord ${streak(uid).best} · ${Object.keys(state.friends || {}).length} Freunde</span></div>
       ${p.avatar ? '<button class="btn ghost sm mt8" id="avdel">Profilbild entfernen</button>' : ''}</div></div></section>
     <div class="grid g2 mt16">
       <form class="card" id="pf" novalidate><div class="card-h"><h2>Persönliche Daten</h2></div>

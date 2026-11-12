@@ -8,6 +8,11 @@ export const state = {
   goals: null,
   plan: null,        // gewählter Split
   publics: {},       // uid -> öffentliches Profil
+  activity: {},      // uid -> { 'YYYY-MM-DD': true } Trainingstage
+  friends: {},       // eigene Freunde: uid -> true
+  requests: {},      // eingehende Freundschaftsanfragen: uid -> { at }
+  sent: {},          // gesendete Anfragen: uid -> true
+  look: null,
   entries: {},       // exId -> { entryId -> entry }
   loaded: { entries: false, publics: false }
 };
@@ -24,12 +29,17 @@ export async function startSession(uid) {
   state.profile = u.profile || null;
   state.goals = u.goals || { kcal: 2500, p: 150, c: 280, f: 80 };
   state.plan = u.plan || null;
+  state.sent = u.sentReq || {};
+  state.look = u.settings?.look || null;
+  unsub.push(onValue(r('activity'), (s) => { state.activity = s.val() || {}; emit('activity'); }, (e) => console.error(e)));
+  unsub.push(onValue(r(`friends/${uid}`), (s) => { state.friends = s.val() || {}; emit('friends'); }, (e) => console.error(e)));
+  unsub.push(onValue(r(`friendreq/${uid}`), (s) => { state.requests = s.val() || {}; emit('friends'); }, (e) => console.error(e)));
   unsub.push(onValue(r('entries'), (s) => { state.entries = s.val() || {}; state.loaded.entries = true; emit('entries'); }, (e) => console.error(e)));
   unsub.push(onValue(r('public'), (s) => { state.publics = s.val() || {}; state.loaded.publics = true; emit('publics'); }, (e) => console.error(e)));
 }
 export function stopSession() {
   unsub.forEach((u) => u()); unsub = [];
-  Object.assign(state, { uid: null, profile: null, goals: null, plan: null, publics: {}, entries: {}, loaded: { entries: false, publics: false } });
+  Object.assign(state, { uid: null, profile: null, goals: null, plan: null, publics: {}, entries: {}, activity: {}, friends: {}, requests: {}, sent: {}, look: null, loaded: { entries: false, publics: false } });
 }
 export const ready = () => new Promise((res) => {
   if (state.loaded.entries && state.loaded.publics) return res();
@@ -63,6 +73,7 @@ export async function savePlan(p) { await set(r(`users/${state.uid}/plan`), p); 
 export async function addEntry(exId, data) {
   const ref = push(r(`entries/${exId}`));
   await set(ref, clean({ ...data, uid: state.uid, createdAt: Date.now() }));
+  if (data.date) set(r(`activity/${state.uid}/${data.date}`), true).catch(() => {});
   return ref.key;
 }
 export async function updateEntry(exId, id, data) {
@@ -198,6 +209,57 @@ export async function sendPlanTo(name, plan) {
 export async function inbox() { return (await get(r(`inbox/${state.uid}`))).val() || {}; }
 export const removeInbox = (pid) => remove(r(`inbox/${state.uid}/${pid}`));
 
+
+/* ---------- Trainings-Streak ---------- */
+const dayNum = (iso) => Math.round(new Date(iso + 'T12:00:00').getTime() / 864e5);
+export const STREAK_GRACE = 2; // erlaubte Ruhetage zwischen zwei Trainings
+export function trainingDays(uid = state.uid) {
+  const set = new Set(Object.keys(state.activity?.[uid] || {}));
+  for (const m of Object.values(state.entries || {})) for (const e of Object.values(m || {})) if (e && e.uid === uid && e.date) set.add(e.date);
+  return [...set].sort();
+}
+/** Streak = Anzahl Trainingstage in Folge, wobei zwischen zwei Trainings höchstens STREAK_GRACE Ruhetage liegen dürfen */
+export function streak(uid = state.uid, todayIso = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10)) {
+  const days = trainingDays(uid).filter((d) => d <= todayIso).map(dayNum);
+  const t = dayNum(todayIso);
+  let best = 0, run = 0, prev = null;
+  for (const d of days) { run = prev != null && d - prev <= STREAK_GRACE + 1 ? run + 1 : 1; best = Math.max(best, run); prev = d; }
+  const last = days[days.length - 1];
+  const alive = last != null && t - last <= STREAK_GRACE + 1;
+  const current = alive ? run : 0;
+  return { current, best, alive, trainedToday: last === t, daysLeft: alive ? STREAK_GRACE + 1 - (t - last) : 0, total: days.length };
+}
+export async function setTrainedOn(date, on) { await set(r(`activity/${state.uid}/${date}`), on ? true : null); }
+
+/* ---------- Freunde ---------- */
+export async function sendFriendRequest(uid) {
+  if (uid === state.uid || state.friends[uid]) return;
+  if (state.requests[uid]) return acceptFriend(uid); // hat mich schon angefragt → direkt annehmen
+  await update(r(), { [`friendreq/${uid}/${state.uid}`]: { at: Date.now() }, [`users/${state.uid}/sentReq/${uid}`]: true });
+  state.sent[uid] = true; emit('friends');
+}
+export async function cancelFriendRequest(uid) {
+  await update(r(), { [`friendreq/${uid}/${state.uid}`]: null, [`users/${state.uid}/sentReq/${uid}`]: null });
+  delete state.sent[uid]; emit('friends');
+}
+export async function acceptFriend(uid) {
+  await update(r(), { [`friends/${state.uid}/${uid}`]: true, [`friends/${uid}/${state.uid}`]: true, [`friendreq/${state.uid}/${uid}`]: null });
+}
+export const declineFriend = (uid) => remove(r(`friendreq/${state.uid}/${uid}`));
+export async function removeFriend(uid) {
+  await update(r(), { [`friends/${state.uid}/${uid}`]: null, [`friends/${uid}/${state.uid}`]: null });
+}
+export function friendStatus(uid) {
+  if (uid === state.uid) return 'me';
+  if (state.friends[uid]) return 'friend';
+  if (state.requests[uid]) return 'incoming';
+  if (state.sent[uid]) return 'sent';
+  return 'none';
+}
+
+/* ---------- Darstellung im Konto ---------- */
+export async function saveLook(look) { state.look = look; await set(r(`users/${state.uid}/settings/look`), clean(look)); }
+
 /* ---------- Konto ---------- */
 export async function exportAll() {
   const s = await get(r(`users/${state.uid}`));
@@ -207,7 +269,10 @@ export async function deleteAllData() {
   const uid = state.uid; const upd = {};
   for (const id of Object.keys((await get(r(`users/${uid}/myPlans`))).val() || {})) upd[`plans/${id}`] = null;
   for (const e of userEntries(uid)) upd[`entries/${e.exId}/${e.id}`] = null;
-  upd[`users/${uid}`] = null; upd[`public/${uid}`] = null;
+  upd[`users/${uid}`] = null; upd[`public/${uid}`] = null; upd[`activity/${uid}`] = null;
+  for (const f of Object.keys(state.requests || {})) upd[`friendreq/${uid}/${f}`] = null;
+  for (const f of Object.keys(state.friends || {})) { upd[`friends/${uid}/${f}`] = null; upd[`friends/${f}/${uid}`] = null; }
+  for (const f of Object.keys(state.sent || {})) upd[`friendreq/${f}/${uid}`] = null;
   if (state.profile?.username) upd[`usernames/${state.profile.username.toLowerCase()}`] = null;
   await update(r(), upd);
 }

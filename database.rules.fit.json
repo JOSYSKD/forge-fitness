@@ -42,6 +42,34 @@
           ".write": "auth != null && (auth.uid === $uid || (newData.child('from').val() === auth.uid && root.child('fit/plans/' + $pid + '/owner').val() === auth.uid))"
         }
       }
+    },
+    "activity": {
+      ".read": "auth != null",
+      "$uid": {
+        ".write": "auth != null && auth.uid === $uid",
+        "$date": {
+          ".validate": "newData.val() === true && $date.matches(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/)"
+        }
+      }
+    },
+    "friends": {
+      "$uid": {
+        ".read": "auth != null",
+        "$other": {
+          ".write": "auth != null && ((auth.uid === $uid && (!newData.exists() || root.child('fit/friendreq/' + $uid + '/' + $other).exists())) || (auth.uid === $other && (!newData.exists() || root.child('fit/friendreq/' + $other + '/' + $uid).exists())))",
+          ".validate": "newData.val() === true"
+        }
+      }
+    },
+    "friendreq": {
+      "$to": {
+        ".read": "auth != null && auth.uid === $to",
+        "$from": {
+          ".read": "auth != null && auth.uid === $from",
+          ".write": "auth != null && (auth.uid === $from || auth.uid === $to) && $from !== $to",
+          ".validate": "newData.child('at').isNumber()"
+        }
+      }
     }
   }
 }
