@@ -7,7 +7,7 @@ Moderne Dark-Mode-Fitness-Plattform: **Übungs-Leaderboards**, **Trainingssplit-
 ## Funktionen
 - **Konten:** Registrierung/Login mit Benutzername + Passwort (Firebase Authentication, Passwörter serverseitig gehasht), Passwort ändern, Konto löschen, Datenexport.
 - **Dashboard:** Begrüßung, Plan des Tages, Statistiken, letzte Trainings, PRs, Platzierungen, Kalorien-/Makro-Übersicht, 7-Tage-Verlauf.
-- **Leaderboards:** 63 Übungsvarianten (Langhantel/Kurzhantel/Kabel/Maschine getrennt), Wertung nach Gewicht, relativ zum Körpergewicht oder geschätztem 1RM; Filter Geschlecht & Gewichtsklasse; Körpergewichtsübungen mit Zusatzgewicht; Einträge bearbeiten/löschen, automatische PRs.
+- **Leaderboards:** 65 Übungsvarianten (Langhantel/Kurzhantel/Kabel/Maschine getrennt), Wertung nach Gewicht, relativ zum Körpergewicht oder geschätztem 1RM; Filter Geschlecht & Gewichtsklasse; Körpergewichtsübungen mit Zusatzgewicht; Einträge bearbeiten/löschen, automatische PRs.
 - **Eigene Trainingspläne:** 100 % individueller Editor (Wochenplan oder Rotation mit 1–14 Tagen, beliebige Übungen aus der Datenbank oder frei, Sätze/Wdh./Pause/Notiz, Reihenfolge), Start aus Split-Vorlage, als aktiven Plan wählen, **teilen** per Link oder direkt an Freunde (Benutzername) → „Mit mir geteilt“, Kopieren fremder Pläne, jederzeit wieder privat.
 - **Trainingspläne:** 12 Splits mit Beschreibung, Eignung, Vor-/Nachteilen, Wochenplan, Beispiel-Einheiten, Frequenz je Muskelgruppe, Regeneration; Vergleich von bis zu 3 Splits; eigenen Plan wählen.
 - **Ernährung:** 164 Basis-Lebensmittel + Online-Suche in Open Food Facts, eigene Lebensmittel, gespeicherte Mahlzeiten, Mahlzeiten-Kategorien, Tagesziele, Fortschrittsbalken, vergangene Tage.

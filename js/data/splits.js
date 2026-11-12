@@ -149,7 +149,7 @@ export const SPLITS = [
     week: [['Brust / Bizeps', 'Brust, Bizeps'], ['Rücken / Trizeps', 'Rücken, Trizeps'], null, ['Schultern / Bauch', 'Schultern, Bauch'], ['Beine', 'Quadrizeps, Beinbeuger, Po, Waden'], null, null],
     freq: f(1, 1, 1, 1, 1, 1, 1, 1, 1),
     sessions: {
-      'Brust / Bizeps': ['Bankdrücken 4×6–8', 'Schrägbankdrücken KH 3×8–10', 'Kabelzug Crossover 3×12–15', 'Bizepscurls 3×8–12', 'Scottcurls 2×10–12'],
+      'Brust / Bizeps': ['Bankdrücken 4×6–8', 'Schrägbankdrücken KH 3×8–10', 'Kabelzug Crossover 3×12–15', 'Bizepscurls 3×8–12', 'Preacher Curls 2×10–12'],
       'Rücken / Trizeps': ['Kreuzheben 3×4–6', 'Klimmzüge 3×6–10', 'Rudern am Kabel 3×8–12', 'Enges Bankdrücken 3×6–10', 'Trizepsdrücken 3×10–12'],
       'Schultern / Bauch': ['Schulterdrücken 4×6–10', 'Seitheben 4×12–15', 'Reverse Flys 3×12–15', 'Shrugs 3×10–12', 'Kabel-Crunches 3×12–15'],
       'Beine': ['Kniebeugen 4×6–8', 'Rumänisches Kreuzheben 3×8–10', 'Beinpresse 3×10–12', 'Beinbeuger 3×10–12', 'Wadenheben 4×12–15']
