@@ -27,6 +27,21 @@
           ".validate": "newData.child('uid').val() === auth.uid && newData.child('weight').isNumber() && newData.child('weight').val() >= 0 && newData.child('weight').val() <= 500 && newData.child('reps').isNumber() && newData.child('reps').val() >= 1 && newData.child('reps').val() <= 100 && newData.child('date').isString() && newData.child('date').val().length === 10"
         }
       }
+    },
+    "plans": {
+      "$id": {
+        ".read": "auth != null && (data.child('owner').val() === auth.uid || data.child('shared').val() === true)",
+        ".write": "auth != null && (data.exists() ? data.child('owner').val() === auth.uid : newData.child('owner').val() === auth.uid)",
+        ".validate": "newData.child('owner').val() === auth.uid && newData.child('name').isString() && newData.child('name').val().length >= 1 && newData.child('name').val().length <= 60"
+      }
+    },
+    "inbox": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        "$pid": {
+          ".write": "auth != null && (auth.uid === $uid || (newData.child('from').val() === auth.uid && root.child('fit/plans/' + $pid + '/owner').val() === auth.uid))"
+        }
+      }
     }
   }
 }

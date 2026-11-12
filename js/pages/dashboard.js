@@ -30,7 +30,15 @@ export async function render(root) {
 
   // Plan heute
   const pt = root.querySelector('#plan-today');
-  if (state.plan && SPLIT[state.plan.id]) {
+  if (state.plan?.custom) {
+    pt.innerHTML = `Dein Plan: <a href="#/plaene/p/${esc(state.plan.id)}">${esc(state.plan.name || 'Eigener Plan')}</a>`;
+    import('../store.js').then(({ getPlan }) => getPlan(state.plan.id)).then((cp) => {
+      if (!cp || !pt.isConnected) return;
+      const d = (new Date().getDay() + 6) % 7;
+      if (cp.mode === 'week') { const w = cp.days[d]; pt.innerHTML += ` · Heute (${DAYS[d]}): <b style="color:var(--text)">${w && !w.rest ? esc(w.title) : 'Ruhetag'}</b>${w && !w.rest && w.muscles ? ' – ' + esc(w.muscles) : ''}`; }
+      else pt.innerHTML += ` · ${cp.days.filter((x) => !x.rest).length}-Tage-Rotation`;
+    }).catch(() => {});
+  } else if (state.plan && SPLIT[state.plan.id]) {
     const s = SPLIT[state.plan.id]; const d = (new Date().getDay() + 6) % 7; const w = s.week[d];
     pt.innerHTML = `Dein Plan: <a href="#/plaene/${s.id}">${esc(s.name)}</a> · Heute (${DAYS[d]}): <b style="color:var(--text)">${w ? esc(w[0]) : 'Ruhetag'}</b>${w ? ' – ' + esc(w[1]) : ''}`;
   } else pt.innerHTML = 'Noch kein Trainingsplan gewählt – <a href="#/plaene">such dir einen Split aus</a>.';

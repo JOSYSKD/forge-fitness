@@ -4,10 +4,18 @@ import { esc, icon, fmt, toast, busy, confirmDialog } from '../ui.js';
 import { authErrorText } from '../firebase.js';
 
 let cmpSel = [];
+let tabsHtml = '';
 try { cmpSel = JSON.parse(localStorage.getItem('forge_cmp') || '[]').filter((id) => SPLIT[id]); } catch {}
 const saveCmp = () => { try { localStorage.setItem('forge_cmp', JSON.stringify(cmpSel)); } catch {} };
 
-export function render(root, { args }) {
+export async function render(root, { args }) {
+  const M = await import('./myplans.js');
+  if (args[0] === 'meine') return M.renderMine(root);
+  if (args[0] === 'geteilt') return M.renderShared(root);
+  if (args[0] === 'neu') return M.renderEditor(root, null, args[1]);
+  if (args[0] === 'edit' && args[1]) return M.renderEditor(root, args[1]);
+  if (args[0] === 'p' && args[1]) return M.renderPlan(root, args[1]);
+  tabsHtml = M.tabs('');
   if (args[0] === 'vergleich') return compare(root);
   if (args[0] && SPLIT[args[0]]) return detail(root, SPLIT[args[0]]);
   list(root);
@@ -19,8 +27,8 @@ const dots = (n) => `<span class="acc" style="letter-spacing:2px">${'●'.repeat
 function list(root) {
   let fDays = 'all';
   root.innerHTML = `<div class="page-head"><div><h1>Trainingspläne</h1><p>${SPLITS.length} bewährte Trainingssplits mit Wochenplan, Frequenz und Regenerationshinweisen.</p></div>
-    <a class="btn" href="#/plaene/vergleich">${icon('compare')}Splits vergleichen</a></div>
-    <div class="chips" id="fd"></div><div class="grid g3 mt16" id="grid"></div>`;
+    <div class="row wrap"><a class="btn" href="#/plaene/vergleich">${icon('compare')}Splits vergleichen</a><a class="btn pri" href="#/plaene/neu">${icon('plus')}Eigenen Plan erstellen</a></div></div>
+    ${tabsHtml}<div class="chips" id="fd"></div><div class="grid g3 mt16" id="grid"></div>`;
   const fd = root.querySelector('#fd');
   const opts = [['all', 'Alle'], ['2', '2 Tage'], ['3', '3 Tage'], ['4', '4 Tage'], ['5', '5 Tage'], ['6', '6 Tage']];
   const draw = () => {
@@ -48,6 +56,7 @@ function detail(root, s) {
       <h1 class="mt12" style="position:relative;z-index:1">${esc(s.name)}</h1>
       <p class="muted mt8" style="position:relative;z-index:1;max-width:680px">${esc(s.short)}</p>
       <div class="qlinks"><button class="btn ${isMine ? '' : 'pri'}" id="pick">${icon(isMine ? 'check' : 'bookmark')}${isMine ? 'Dein aktueller Plan' : 'Als meinen Plan wählen'}</button>
+        <a class="btn" href="#/plaene/neu/${s.id}">${icon('edit')}Als eigenen Plan anpassen</a>
         <button class="btn" id="cmp">${icon('compare')}${cmpSel.includes(s.id) ? 'Im Vergleich' : 'Zum Vergleich hinzufügen'}</button></div>
     </section>
     <div class="grid g2 mt16">

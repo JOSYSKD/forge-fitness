@@ -154,13 +154,58 @@ export function sumDay(day) {
   return t;
 }
 
+
+/* ---------- Eigene Trainingspläne + Teilen ---------- */
+export async function listMyPlans() {
+  const ids = Object.keys((await get(r(`users/${state.uid}/myPlans`))).val() || {});
+  const plans = await Promise.all(ids.map((id) => getPlan(id).catch(() => null)));
+  return plans.filter(Boolean).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+}
+export async function getPlan(id) {
+  const v = (await get(r(`plans/${id}`))).val();
+  return v ? normPlan({ ...v, id }) : null;
+}
+export function normPlan(p) {
+  p.days = (Array.isArray(p.days) ? p.days : Object.values(p.days || {})).map((d) => ({
+    ...d, exercises: Array.isArray(d.exercises) ? d.exercises : Object.values(d.exercises || {})
+  }));
+  return p;
+}
+export async function savePlanDoc(id, data) {
+  const key = id || push(r('plans')).key;
+  const now = Date.now();
+  const doc = clean({ ...data, owner: state.uid, ownerName: username(), updatedAt: now, createdAt: data.createdAt || now });
+  delete doc.id;
+  await update(r(), { [`plans/${key}`]: doc, [`users/${state.uid}/myPlans/${key}`]: true });
+  return key;
+}
+export async function setPlanShared(id, shared) { await update(r(`plans/${id}`), { shared: !!shared, updatedAt: Date.now() }); }
+export async function deletePlanDoc(id) {
+  const upd = { [`plans/${id}`]: null, [`users/${state.uid}/myPlans/${id}`]: null };
+  if (state.plan?.id === id) upd[`users/${state.uid}/plan`] = null;
+  await update(r(), upd);
+  if (state.plan?.id === id) { state.plan = null; emit('plan'); }
+}
+/** Plan an Freund (Benutzername) senden → landet in dessen „Mit mir geteilt“ */
+export async function sendPlanTo(name, plan) {
+  const uid = (await get(r(`usernames/${name.trim().toLowerCase()}`))).val();
+  if (!uid) throw Object.assign(new Error('Benutzer nicht gefunden'), { code: 'forge/no-user' });
+  if (uid === state.uid) throw Object.assign(new Error('self'), { code: 'forge/self' });
+  if (!plan.shared) await setPlanShared(plan.id, true);
+  await set(r(`inbox/${uid}/${plan.id}`), { from: state.uid, fromName: username(), planName: plan.name, at: Date.now() });
+  return state.publics[uid]?.username || name;
+}
+export async function inbox() { return (await get(r(`inbox/${state.uid}`))).val() || {}; }
+export const removeInbox = (pid) => remove(r(`inbox/${state.uid}/${pid}`));
+
 /* ---------- Konto ---------- */
 export async function exportAll() {
   const s = await get(r(`users/${state.uid}`));
-  return { exportedAt: new Date().toISOString(), username: username(), private: s.val(), entries: userEntries() };
+  return { exportedAt: new Date().toISOString(), username: username(), private: s.val(), entries: userEntries(), plans: await listMyPlans() };
 }
 export async function deleteAllData() {
   const uid = state.uid; const upd = {};
+  for (const id of Object.keys((await get(r(`users/${uid}/myPlans`))).val() || {})) upd[`plans/${id}`] = null;
   for (const e of userEntries(uid)) upd[`entries/${e.exId}/${e.id}`] = null;
   upd[`users/${uid}`] = null; upd[`public/${uid}`] = null;
   if (state.profile?.username) upd[`usernames/${state.profile.username.toLowerCase()}`] = null;
